@@ -50,8 +50,35 @@
     .gasto-extra-box {
       background-color: #fcf4ff;
       border: 1px dashed var(--primary);
-      padding: 10px 15px;
+      padding: 15px;
       border-radius: 8px;
+      margin-top: 15px;
+    }
+    .linha-extra {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      align-items: center;
+    }
+    .linha-extra input {
+      margin-top: 0;
+    }
+    .btn-remover {
+      background-color: #d32f2f;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 15px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      width: auto;
+      margin-top: 0;
+    }
+    .btn-secundario {
+      background-color: transparent;
+      color: var(--primary);
+      border: 2px solid var(--primary);
       margin-top: 15px;
     }
     button {
@@ -83,10 +110,14 @@
       font-size: 16px;
       display: block;
       margin-top: 8px;
+      border-top: 1px solid #ddd;
+      padding-top: 8px;
     }
     .extra-text {
       color: #d32f2f;
       font-size: 13px;
+      display: block;
+      margin-top: 2px;
     }
     footer {
       margin-top: auto;
@@ -95,11 +126,17 @@
       color: #777;
       font-size: 14px;
     }
+    .mensagem-amor {
+      color: var(--primary);
+      font-style: italic;
+      margin-top: 5px;
+      font-size: 15px;
+    }
   </style>
 </head>
 <body>
 
-  <h2>Controle Diário</h2>
+  <h2>Controle Diário 🏍️</h2>
 
   <div class="card">
     <form id="registroForm">
@@ -116,11 +153,11 @@
       <input type="number" step="0.01" id="gasolina" placeholder="0.00" required>
 
       <div class="gasto-extra-box">
-        <label style="margin-top: 0;">Gasto Extra / Manutenção (Opcional):</label>
-        <input type="text" id="descExtra" placeholder="Ex: Lavagem, Óleo, Lanche...">
+        <label style="margin-top: 0;">Gastos Extras (Opcional):</label>
         
-        <label>Valor do Gasto Extra (R$):</label>
-        <input type="number" step="0.01" id="valorExtra" placeholder="0.00">
+        <div id="listaExtras"></div>
+
+        <button type="button" id="btnAdicionarExtra" class="btn-secundario">+ Adicionar Gasto Extra</button>
       </div>
 
       <button type="submit">Salvar Dia</button>
@@ -132,12 +169,27 @@
     </div>
 
   <footer>
-    <p>Pilote com cuidado, te amo, Linda! ❤️</p>
+    <p>Feito para organizar o seu dia a dia.</p>
+    <p class="mensagem-amor">Pilote com cuidado, te amo, Linda! ❤️<br>— Do seu amor, Felipe</p>
   </footer>
 
   <script>
     const form = document.getElementById('registroForm');
     const historicoDiv = document.getElementById('historico');
+    const btnAdicionarExtra = document.getElementById('btnAdicionarExtra');
+    const listaExtras = document.getElementById('listaExtras');
+
+    // Função para adicionar uma nova linha de gasto extra
+    btnAdicionarExtra.addEventListener('click', () => {
+      const div = document.createElement('div');
+      div.className = 'linha-extra';
+      div.innerHTML = `
+        <input type="text" class="desc-extra" placeholder="O que foi?">
+        <input type="number" step="0.01" class="valor-extra" placeholder="R$ 0.00">
+        <button type="button" class="btn-remover" onclick="this.parentElement.remove()">X</button>
+      `;
+      listaExtras.appendChild(div);
+    });
 
     document.addEventListener('DOMContentLoaded', renderizarHistorico);
 
@@ -149,14 +201,31 @@
       const ganhoIfood = parseFloat(document.getElementById('ganhoIfood').value) || 0;
       const gasolina = parseFloat(document.getElementById('gasolina').value) || 0;
       
-      const descExtra = document.getElementById('descExtra').value || '';
-      const valorExtra = parseFloat(document.getElementById('valorExtra').value) || 0;
+      // Coletar todos os gastos extras adicionados
+      let gastosExtrasArray = [];
+      let totalExtras = 0;
+      
+      const linhasDeGasto = document.querySelectorAll('.linha-extra');
+      linhasDeGasto.forEach(linha => {
+        const desc = linha.querySelector('.desc-extra').value || 'Outros';
+        const valor = parseFloat(linha.querySelector('.valor-extra').value) || 0;
+        
+        if (valor > 0) {
+          gastosExtrasArray.push({ descricao: desc, valor: valor });
+          totalExtras += valor;
+        }
+      });
 
-      // O lucro subtrai a gasolina e qualquer gasto extra registrado
-      const lucroDia = (ganho99 + ganhoIfood) - (gasolina + valorExtra);
+      // O lucro subtrai a gasolina e a soma de todos os gastos extras
+      const lucroDia = (ganho99 + ganhoIfood) - (gasolina + totalExtras);
 
       const registro = {
-        dia, ganho99, ganhoIfood, gasolina, descExtra, valorExtra, lucroDia
+        dia, 
+        ganho99, 
+        ganhoIfood, 
+        gasolina, 
+        gastosExtras: gastosExtrasArray, 
+        lucroDia
       };
 
       let dados = JSON.parse(localStorage.getItem('dadosLinda')) || [];
@@ -164,6 +233,7 @@
       localStorage.setItem('dadosLinda', JSON.stringify(dados));
 
       form.reset();
+      listaExtras.innerHTML = ''; // Limpa as linhas extras após salvar
       renderizarHistorico();
       alert('Dados do dia salvos com sucesso!');
     });
@@ -178,10 +248,18 @@
       }
 
       dados.slice().reverse().forEach(item => {
-        let linhaExtra = '';
-        if (item.valorExtra > 0) {
-          const descricao = item.descExtra ? item.descExtra : 'Outros';
-          linhaExtra = `<span class="extra-text">Gasto Extra (${descricao}): - R$ ${item.valorExtra.toFixed(2)}</span><br>`;
+        let blocoExtras = '';
+        
+        // Verifica se existem gastos extras na nova estrutura (array)
+        if (item.gastosExtras && item.gastosExtras.length > 0) {
+          item.gastosExtras.forEach(extra => {
+            blocoExtras += `<span class="extra-text">Gasto Extra (${extra.descricao}): - R$ ${extra.valor.toFixed(2)}</span>`;
+          });
+        } 
+        // Mantém a compatibilidade caso exista algum dado salvo no formato antigo
+        else if (item.valorExtra > 0) {
+          const desc = item.descExtra ? item.descExtra : 'Outros';
+          blocoExtras = `<span class="extra-text">Gasto Extra (${desc}): - R$ ${item.valorExtra.toFixed(2)}</span>`;
         }
 
         const div = document.createElement('div');
@@ -190,7 +268,7 @@
           <strong>${item.dia}</strong><br>
           Faturamento: R$ ${(item.ganho99 + item.ganhoIfood).toFixed(2)} <br>
           Gasolina: - R$ ${item.gasolina.toFixed(2)} <br>
-          ${linhaExtra}
+          ${blocoExtras}
           <span class="lucro">Lucro Líquido: R$ ${item.lucroDia.toFixed(2)}</span>
         `;
         historicoDiv.appendChild(div);
